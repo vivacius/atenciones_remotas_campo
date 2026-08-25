@@ -10,12 +10,27 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_URL = os.getenv("DB_URL", "sqlite:///data/soporte.db")
+# Soporta obtener la URL desde st.secrets si está en Streamlit Cloud, o de os.getenv localmente
+DB_URL = None
+try:
+    import streamlit as st
+    if hasattr(st, "secrets") and "DB_URL" in st.secrets:
+        DB_URL = st.secrets["DB_URL"]
+except Exception:
+    pass
 
-engine = create_engine(
-    DB_URL,
-    connect_args={"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
-)
+if not DB_URL:
+    DB_URL = os.getenv("DB_URL", "sqlite:///data/soporte.db")
+
+engine_kwargs = {}
+if DB_URL.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Para PostgreSQL / Supabase en producción
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300
+
+engine = create_engine(DB_URL, **engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
