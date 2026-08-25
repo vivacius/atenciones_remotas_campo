@@ -1130,8 +1130,9 @@ with tabs[IDX_MAESTROS]:
         c3.metric("Total operarios",   len(operarios_m))
         c4.metric("Operarios activos", sum(1 for x in operarios_m if x.activo))
 
-        t1, t2 = st.tabs(["🚜 Máquinas", "👷 Operarios"])
-        with t1:
+        ver_tabla = st.radio("Ver registros de:", ["🚜 Máquinas", "👷 Operarios"], horizontal=True, key="rad_maestros")
+
+        if ver_tabla == "🚜 Máquinas":
             df = pd.DataFrame([{
                 "Código":      str(x.codigo),
                 "Descripción": x.descripcion,
@@ -1142,7 +1143,7 @@ with tabs[IDX_MAESTROS]:
                 "Activa":      x.activa,
             } for x in maquinas_m])
             st.dataframe(df, use_container_width=True, hide_index=True)
-        with t2:
+        else:
             df = pd.DataFrame([{
                 "Código":  str(x.codigo),
                 "Nombre":  x.nombre,
