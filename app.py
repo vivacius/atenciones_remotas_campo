@@ -629,74 +629,136 @@ with tabs[IDX_CASOS]:
 with tabs[IDX_NUEVO]:
     db = get_db()
     try:
-        maquinas  = db.query(Maquina).filter(Maquina.activa.is_(True)).order_by(Maquina.codigo).all()
-        operarios = db.query(Operario).filter(Operario.activo.is_(True)).order_by(Operario.nombre).all()
+        maquinas = (
+            db.query(Maquina)
+            .filter(Maquina.activa.is_(True))
+            .order_by(Maquina.codigo)
+            .all()
+        )
+        operarios = (
+            db.query(Operario)
+            .filter(Operario.activo.is_(True))
+            .order_by(Operario.nombre)
+            .all()
+        )
 
         if not maquinas:
-            st.warning("⚠️ Primero importe el archivo maestro de máquinas en la pestaña **Maestros**.")
-            st.stop()
+            st.warning(
+                "⚠️ Primero importe el archivo maestro de máquinas "
+                "en la pestaña **Maestros**."
+            )
+        else:
+            maquina_map = {f"{m.codigo} — {m.descripcion}": m for m in maquinas}
+            operario_map = {f"{o.codigo} — {o.nombre}": o for o in operarios}
 
-        maquina_map  = {f"{m.codigo} — {m.descripcion}": m for m in maquinas}
-        operario_map = {f"{o.codigo} — {o.nombre}": o for o in operarios}
-
-        with st.form("nuevo_caso", clear_on_submit=True):
-            st.markdown('<div class="section-title">1. Identificación</div>', unsafe_allow_html=True)
-            c1, c2, c3 = st.columns([3, 1, 1])
-            maquina_txt = c1.selectbox("🚜 Cosechadora *", list(maquina_map.keys()), index=None, placeholder="Seleccione...")
-            fecha       = c2.date_input("📅 Fecha", value=datetime.now().date())
-            hora        = c3.time_input("🕐 Hora",  value=datetime.now().time().replace(second=0, microsecond=0))
-
-            c1, c2 = st.columns(2)
-            operario_txt = c1.selectbox("👷 Operario contactado", list(operario_map.keys()), index=None, placeholder="Opcional...")
-            origen       = c2.selectbox("📡 Canal de contacto", TIPOS_CONTACTO)
-
-            st.markdown('<div class="section-title">2. Caracterización del problema</div>', unsafe_allow_html=True)
-            categoria        = st.selectbox("📂 Categoría *", CATEGORIAS)
-            criticidad_auto  = criticidad_por_categoria(categoria)
-            col_crit, _      = st.columns([1, 3])
-            col_crit.info(f"🎯 Criticidad asignada automáticamente: **{criticidad_auto}**")
-
-            problema     = st.text_area("📝 Descripción del problema *", height=120,
-                                        placeholder="Describa con claridad el problema reportado o detectado...")
-            observaciones = st.text_area("💬 Observaciones adicionales", height=75,
-                                          placeholder="Contexto, antecedentes, información extra...")
-
-            st.markdown('<div class="section-title">3. Seguimiento (opcional)</div>', unsafe_allow_html=True)
-            requiere = st.checkbox("📅 Programar seguimiento")
-            c1, c2   = st.columns(2)
-            fecha_seg = c1.date_input("Fecha seguimiento", value=datetime.now().date(), disabled=not requiere)
-            hora_seg  = c2.time_input("Hora seguimiento",  value=time(8, 0),            disabled=not requiere)
-
-            guardar = st.form_submit_button("✅ Crear caso", use_container_width=True, type="primary")
-
-        if guardar:
-            if not maquina_txt or not problema.strip():
-                st.error("⚠️ Seleccione la cosechadora y describa el problema.")
-            else:
-                maquina  = maquina_map[maquina_txt]
-                operario = operario_map.get(operario_txt) if operario_txt else None
-                fecha_hora = datetime.combine(fecha, hora)
-                proximo    = datetime.combine(fecha_seg, hora_seg) if requiere else None
-
-                caso = Caso(
-                    consecutivo              = generar_consecutivo(db),
-                    fecha_apertura           = fecha_hora,
-                    maquina_id               = maquina.id,
-                    operario_id              = operario.id if operario else None,
-                    creado_por_id            = st.session_state.usuario_id,
-                    origen                   = origen,
-                    categoria                = categoria,
-                    criticidad               = criticidad_auto,
-                    problema                 = problema.strip(),
-                    estado                   = "Abierto",
-                    requiere_seguimiento     = requiere,
-                    fecha_proximo_seguimiento= proximo,
-                    observaciones            = observaciones.strip(),
+            with st.form("nuevo_caso", clear_on_submit=True):
+                st.markdown(
+                    '<div class="section-title">1. Identificación</div>',
+                    unsafe_allow_html=True
                 )
-                db.add(caso)
-                db.commit()
-                st.success(f"✅ Caso creado: **{caso.consecutivo}** — Criticidad: **{criticidad_auto}**")
-                st.balloons()
+
+                c1, c2, c3 = st.columns([3, 1, 1])
+                maquina_txt = c1.selectbox(
+                    "🚜 Cosechadora *",
+                    list(maquina_map.keys()),
+                    index=None,
+                    placeholder="Seleccione..."
+                )
+                fecha = c2.date_input("📅 Fecha", value=datetime.now().date())
+                hora = c3.time_input(
+                    "🕐 Hora",
+                    value=datetime.now().time().replace(second=0, microsecond=0)
+                )
+
+                c1, c2 = st.columns(2)
+                operario_txt = c1.selectbox(
+                    "👷 Operario contactado",
+                    list(operario_map.keys()),
+                    index=None,
+                    placeholder="Opcional..."
+                )
+                origen = c2.selectbox("📡 Canal de contacto", TIPOS_CONTACTO)
+
+                st.markdown(
+                    '<div class="section-title">2. Caracterización del problema</div>',
+                    unsafe_allow_html=True
+                )
+                categoria = st.selectbox("📂 Categoría *", CATEGORIAS)
+                criticidad_auto = criticidad_por_categoria(categoria)
+
+                col_crit, _ = st.columns([1, 3])
+                col_crit.info(
+                    f"🎯 Criticidad asignada automáticamente: **{criticidad_auto}**"
+                )
+
+                problema = st.text_area(
+                    "📝 Descripción del problema *",
+                    height=120,
+                    placeholder="Describa con claridad el problema reportado o detectado..."
+                )
+                observaciones = st.text_area(
+                    "💬 Observaciones adicionales",
+                    height=75,
+                    placeholder="Contexto, antecedentes, información extra..."
+                )
+
+                st.markdown(
+                    '<div class="section-title">3. Seguimiento (opcional)</div>',
+                    unsafe_allow_html=True
+                )
+                requiere = st.checkbox("📅 Programar seguimiento")
+
+                c1, c2 = st.columns(2)
+                fecha_seg = c1.date_input(
+                    "Fecha seguimiento",
+                    value=datetime.now().date(),
+                    disabled=not requiere
+                )
+                hora_seg = c2.time_input(
+                    "Hora seguimiento",
+                    value=time(8, 0),
+                    disabled=not requiere
+                )
+
+                guardar = st.form_submit_button(
+                    "✅ Crear caso",
+                    use_container_width=True,
+                    type="primary"
+                )
+
+            if guardar:
+                if not maquina_txt or not problema.strip():
+                    st.error("⚠️ Seleccione la cosechadora y describa el problema.")
+                else:
+                    maquina = maquina_map[maquina_txt]
+                    operario = operario_map.get(operario_txt) if operario_txt else None
+                    fecha_hora = datetime.combine(fecha, hora)
+                    proximo = datetime.combine(fecha_seg, hora_seg) if requiere else None
+
+                    caso = Caso(
+                        consecutivo=generar_consecutivo(db),
+                        fecha_apertura=fecha_hora,
+                        maquina_id=maquina.id,
+                        operario_id=operario.id if operario else None,
+                        creado_por_id=st.session_state.usuario_id,
+                        origen=origen,
+                        categoria=categoria,
+                        criticidad=criticidad_auto,
+                        problema=problema.strip(),
+                        estado="Abierto",
+                        requiere_seguimiento=requiere,
+                        fecha_proximo_seguimiento=proximo,
+                        observaciones=observaciones.strip(),
+                    )
+
+                    db.add(caso)
+                    db.commit()
+
+                    st.success(
+                        f"✅ Caso creado: **{caso.consecutivo}** — "
+                        f"Criticidad: **{criticidad_auto}**"
+                    )
+                    st.balloons()
     finally:
         db.close()
 
