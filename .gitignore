@@ -1,0 +1,23 @@
+# Archivos de entorno y credenciales (¡NUNCA SUBIR AL REPO!)
+.env
+*.env
+
+# Base de datos SQLite local
+*.db
+data/*.db
+data/
+
+# Python / Entornos virtuales
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Archivos de Excel de prueba si no quieres subirlos (opcional, dejamos solo maestras temporales si deseas omitirlos)
+# *.xlsx
+
+# VS Code / IDEs
+.vscode/
+.idea/
