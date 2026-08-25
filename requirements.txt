@@ -3,6 +3,7 @@ pandas==2.2.2
 openpyxl==3.1.5
 plotly==5.23.0
 SQLAlchemy==2.0.32
-passlib[bcrypt]==1.7.4
+passlib==1.7.4
+bcrypt==4.3.0
 python-dotenv==1.0.1
 psycopg2-binary==2.9.9
