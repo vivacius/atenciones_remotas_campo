@@ -138,9 +138,12 @@ class Gestion(Base):
 def init_db():
     os.makedirs("data", exist_ok=True)
     Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
 
     try:
+        # Streamlit Cloud -> st.secrets
+        # Local -> variables de entorno
         try:
             import streamlit as st
             admin_user = st.secrets.get(
@@ -178,7 +181,5 @@ def init_db():
 
     finally:
         db.close()
-
-
 def get_db():
     return SessionLocal()
