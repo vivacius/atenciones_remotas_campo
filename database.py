@@ -139,10 +139,31 @@ def init_db():
     os.makedirs("data", exist_ok=True)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+
     try:
-        admin_user = os.getenv("ADMIN_USER", "admin")
-        admin_password = os.getenv("ADMIN_PASSWORD", "Cambiar_Esta_Clave_2026")
-        existe = db.query(Usuario).filter(Usuario.usuario == admin_user).first()
+        try:
+            import streamlit as st
+            admin_user = st.secrets.get(
+                "ADMIN_USER",
+                os.getenv("ADMIN_USER", "admin")
+            )
+            admin_password = st.secrets.get(
+                "ADMIN_PASSWORD",
+                os.getenv("ADMIN_PASSWORD", "Cambiar_Esta_Clave_2026")
+            )
+        except Exception:
+            admin_user = os.getenv("ADMIN_USER", "admin")
+            admin_password = os.getenv(
+                "ADMIN_PASSWORD",
+                "Cambiar_Esta_Clave_2026"
+            )
+
+        existe = (
+            db.query(Usuario)
+            .filter(Usuario.usuario == admin_user)
+            .first()
+        )
+
         if not existe:
             db.add(
                 Usuario(
@@ -154,6 +175,7 @@ def init_db():
                 )
             )
             db.commit()
+
     finally:
         db.close()
 
