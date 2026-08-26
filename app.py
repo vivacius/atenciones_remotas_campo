@@ -2,6 +2,7 @@ import os
 import io
 import base64
 from datetime import datetime, timedelta, time
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 import pandas as pd
@@ -19,6 +20,34 @@ from utils import (
 
 load_dotenv()
 init_db()
+
+# ─── Zona horaria Colombia ─────────────────────────────────────────────────────
+TZ_COLOMBIA = ZoneInfo("America/Bogota")
+
+def ahora_colombia():
+    """
+    Hora actual de Colombia, sin tzinfo para mantener compatibilidad
+    con las columnas DateTime actuales de SQLAlchemy/PostgreSQL.
+    """
+    return datetime.now(TZ_COLOMBIA).replace(tzinfo=None)
+
+
+def _fecha_excel_segura(valor):
+    """
+    Excel no admite datetimes con zona horaria.
+    Si llega una fecha timezone-aware, la convierte a Colombia y quita tzinfo.
+    """
+    if isinstance(valor, datetime) and valor.tzinfo is not None:
+        return valor.astimezone(TZ_COLOMBIA).replace(tzinfo=None)
+    return valor
+
+
+def preparar_para_excel(df):
+    """Devuelve una copia del DataFrame compatible con openpyxl/Excel."""
+    df = df.copy()
+    for columna in df.columns:
+        df[columna] = df[columna].map(_fecha_excel_segura)
+    return df
 
 # ─── Configuración de página ──────────────────────────────────────────────────
 
@@ -497,7 +526,7 @@ IDX_MAESTROS = 6 if st.session_state.usuario_rol == "administrador" else 5
 with tabs[IDX_CASOS]:
     db = get_db()
     try:
-        hoy = datetime.now().date()
+        hoy = ahora_colombia().date()
 
         # ── KPIs globales (siempre visibles arriba) ──
         todos = db.query(Caso).all()
@@ -548,8 +577,8 @@ with tabs[IDX_CASOS]:
 
         estados_f = ["Todos"] + ESTADOS_CASO
         f_estado = fc1.selectbox("Estado", estados_f, key="cp_estado")
-        f_desde  = fc2.date_input("Desde", value=(datetime.now() - timedelta(days=30)).date(), key="cp_desde")
-        f_hasta  = fc3.date_input("Hasta", value=datetime.now().date(), key="cp_hasta")
+        f_desde  = fc2.date_input("Desde", value=(ahora_colombia() - timedelta(days=30)).date(), key="cp_desde")
+        f_hasta  = fc3.date_input("Hasta", value=ahora_colombia().date(), key="cp_hasta")
 
         maquinas_all  = db.query(Maquina).order_by(Maquina.codigo).all()
         operarios_all = db.query(Operario).order_by(Operario.nombre).all()
@@ -664,10 +693,10 @@ with tabs[IDX_NUEVO]:
                     index=None,
                     placeholder="Seleccione..."
                 )
-                fecha = c2.date_input("📅 Fecha", value=datetime.now().date())
+                fecha = c2.date_input("📅 Fecha", value=ahora_colombia().date())
                 hora = c3.time_input(
                     "🕐 Hora",
-                    value=datetime.now().time().replace(second=0, microsecond=0)
+                    value=ahora_colombia().time().replace(second=0, microsecond=0)
                 )
 
                 c1, c2 = st.columns(2)
@@ -711,7 +740,7 @@ with tabs[IDX_NUEVO]:
                 c1, c2 = st.columns(2)
                 fecha_seg = c1.date_input(
                     "Fecha seguimiento",
-                    value=datetime.now().date(),
+                    value=ahora_colombia().date(),
                     disabled=not requiere
                 )
                 hora_seg = c2.time_input(
@@ -823,8 +852,8 @@ with tabs[IDX_GESTION]:
                 with st.form("gestion", clear_on_submit=True):
                     st.markdown('<div class="section-title">Registro de la gestión</div>', unsafe_allow_html=True)
                     c1, c2, c3 = st.columns(3)
-                    fecha    = c1.date_input("📅 Fecha", value=datetime.now().date())
-                    hora     = c2.time_input("🕐 Hora", value=datetime.now().time().replace(second=0, microsecond=0))
+                    fecha    = c1.date_input("📅 Fecha", value=ahora_colombia().date())
+                    hora     = c2.time_input("🕐 Hora", value=ahora_colombia().time().replace(second=0, microsecond=0))
                     duracion = c3.number_input("⏱️ Duración (min)", min_value=0.0, step=1.0, value=0.0)
 
                     c1, c2   = st.columns(2)
@@ -843,7 +872,7 @@ with tabs[IDX_GESTION]:
                     requiere     = c2.checkbox("📅 Requiere nueva gestión")
 
                     c1, c2   = st.columns(2)
-                    f_seg    = c1.date_input("Fecha próxima gestión", value=datetime.now().date(), disabled=not requiere)
+                    f_seg    = c1.date_input("Fecha próxima gestión", value=ahora_colombia().date(), disabled=not requiere)
                     h_seg    = c2.time_input("Hora próxima gestión",  value=time(8, 0),            disabled=not requiere)
 
                     cerrando = nuevo_estado in ["Solucionado", "Cerrado sin solución"]
@@ -983,8 +1012,8 @@ with tabs[IDX_IND]:
     db = get_db()
     try:
         c1, c2 = st.columns(2)
-        desde_ind = c1.date_input("Desde", value=(datetime.now() - timedelta(days=30)).date(), key="ind_desde")
-        hasta_ind = c2.date_input("Hasta", value=datetime.now().date(), key="ind_hasta")
+        desde_ind = c1.date_input("Desde", value=(ahora_colombia() - timedelta(days=30)).date(), key="ind_desde")
+        hasta_ind = c2.date_input("Hasta", value=ahora_colombia().date(), key="ind_hasta")
 
         inicio = datetime.combine(desde_ind, datetime.min.time())
         fin    = datetime.combine(hasta_ind, datetime.max.time())
@@ -1073,22 +1102,30 @@ with tabs[IDX_IND]:
             st.plotly_chart(fig2, use_container_width=True)
 
             # Exportar Excel
+            # Excel/openpyxl no acepta datetimes con zona horaria.
+            # Se normalizan las fechas a hora Colombia y se elimina tzinfo.
             buffer = io.BytesIO()
+
+            df_casos_excel = preparar_para_excel(df_casos)
+
+            df_gest = pd.DataFrame([{
+                "Caso":              g.caso.consecutivo,
+                "Fecha":             g.fecha_hora,
+                "Máquina":           str(g.caso.maquina.codigo),
+                "Analista":          g.usuario.nombre,
+                "Canal":             g.tipo_contacto,
+                "Resultado":         g.resultado_contacto,
+                "Duración (min)":    g.duracion_minutos,
+                "Detalle":           g.detalle,
+                "Solución indicada": g.solucion_indicada or "",
+                "Estado resultante": g.estado_resultante,
+            } for g in gestiones_ind])
+
+            df_gest_excel = preparar_para_excel(df_gest)
+
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                df_casos.to_excel(writer, index=False, sheet_name="Casos")
-                df_gest = pd.DataFrame([{
-                    "Caso":              g.caso.consecutivo,
-                    "Fecha":             g.fecha_hora,
-                    "Máquina":           str(g.caso.maquina.codigo),
-                    "Analista":          g.usuario.nombre,
-                    "Canal":             g.tipo_contacto,
-                    "Resultado":         g.resultado_contacto,
-                    "Duración (min)":    g.duracion_minutos,
-                    "Detalle":           g.detalle,
-                    "Solución indicada": g.solucion_indicada or "",
-                    "Estado resultante": g.estado_resultante,
-                } for g in gestiones_ind])
-                df_gest.to_excel(writer, index=False, sheet_name="Gestiones")
+                df_casos_excel.to_excel(writer, index=False, sheet_name="Casos")
+                df_gest_excel.to_excel(writer, index=False, sheet_name="Gestiones")
 
             st.download_button(
                 "📥 Descargar reporte Excel",
