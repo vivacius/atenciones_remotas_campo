@@ -2,7 +2,6 @@ import os
 import io
 import base64
 from datetime import datetime, timedelta, time
-from zoneinfo import ZoneInfo
 
 import streamlit as st
 import pandas as pd
@@ -20,34 +19,6 @@ from utils import (
 
 load_dotenv()
 init_db()
-
-# ─── Zona horaria Colombia ─────────────────────────────────────────────────────
-TZ_COLOMBIA = ZoneInfo("America/Bogota")
-
-def ahora_colombia():
-    """
-    Hora actual de Colombia, sin tzinfo para mantener compatibilidad
-    con las columnas DateTime actuales de SQLAlchemy/PostgreSQL.
-    """
-    return datetime.now(TZ_COLOMBIA).replace(tzinfo=None)
-
-
-def _fecha_excel_segura(valor):
-    """
-    Excel no admite datetimes con zona horaria.
-    Si llega una fecha timezone-aware, la convierte a Colombia y quita tzinfo.
-    """
-    if isinstance(valor, datetime) and valor.tzinfo is not None:
-        return valor.astimezone(TZ_COLOMBIA).replace(tzinfo=None)
-    return valor
-
-
-def preparar_para_excel(df):
-    """Devuelve una copia del DataFrame compatible con openpyxl/Excel."""
-    df = df.copy()
-    for columna in df.columns:
-        df[columna] = df[columna].map(_fecha_excel_segura)
-    return df
 
 # ─── Configuración de página ──────────────────────────────────────────────────
 
@@ -526,7 +497,7 @@ IDX_MAESTROS = 6 if st.session_state.usuario_rol == "administrador" else 5
 with tabs[IDX_CASOS]:
     db = get_db()
     try:
-        hoy = ahora_colombia().date()
+        hoy = datetime.now().date()
 
         # ── KPIs globales (siempre visibles arriba) ──
         todos = db.query(Caso).all()
@@ -577,8 +548,8 @@ with tabs[IDX_CASOS]:
 
         estados_f = ["Todos"] + ESTADOS_CASO
         f_estado = fc1.selectbox("Estado", estados_f, key="cp_estado")
-        f_desde  = fc2.date_input("Desde", value=(ahora_colombia() - timedelta(days=30)).date(), key="cp_desde")
-        f_hasta  = fc3.date_input("Hasta", value=ahora_colombia().date(), key="cp_hasta")
+        f_desde  = fc2.date_input("Desde", value=(datetime.now() - timedelta(days=30)).date(), key="cp_desde")
+        f_hasta  = fc3.date_input("Hasta", value=datetime.now().date(), key="cp_hasta")
 
         maquinas_all  = db.query(Maquina).order_by(Maquina.codigo).all()
         operarios_all = db.query(Operario).order_by(Operario.nombre).all()
@@ -658,136 +629,74 @@ with tabs[IDX_CASOS]:
 with tabs[IDX_NUEVO]:
     db = get_db()
     try:
-        maquinas = (
-            db.query(Maquina)
-            .filter(Maquina.activa.is_(True))
-            .order_by(Maquina.codigo)
-            .all()
-        )
-        operarios = (
-            db.query(Operario)
-            .filter(Operario.activo.is_(True))
-            .order_by(Operario.nombre)
-            .all()
-        )
+        maquinas  = db.query(Maquina).filter(Maquina.activa.is_(True)).order_by(Maquina.codigo).all()
+        operarios = db.query(Operario).filter(Operario.activo.is_(True)).order_by(Operario.nombre).all()
 
         if not maquinas:
-            st.warning(
-                "⚠️ Primero importe el archivo maestro de máquinas "
-                "en la pestaña **Maestros**."
-            )
-        else:
-            maquina_map = {f"{m.codigo} — {m.descripcion}": m for m in maquinas}
-            operario_map = {f"{o.codigo} — {o.nombre}": o for o in operarios}
+            st.warning("⚠️ Primero importe el archivo maestro de máquinas en la pestaña **Maestros**.")
+            st.stop()
 
-            with st.form("nuevo_caso", clear_on_submit=True):
-                st.markdown(
-                    '<div class="section-title">1. Identificación</div>',
-                    unsafe_allow_html=True
+        maquina_map  = {f"{m.codigo} — {m.descripcion}": m for m in maquinas}
+        operario_map = {f"{o.codigo} — {o.nombre}": o for o in operarios}
+
+        with st.form("nuevo_caso", clear_on_submit=True):
+            st.markdown('<div class="section-title">1. Identificación</div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns([3, 1, 1])
+            maquina_txt = c1.selectbox("🚜 Cosechadora *", list(maquina_map.keys()), index=None, placeholder="Seleccione...")
+            fecha       = c2.date_input("📅 Fecha", value=datetime.now().date())
+            hora        = c3.time_input("🕐 Hora",  value=datetime.now().time().replace(second=0, microsecond=0))
+
+            c1, c2 = st.columns(2)
+            operario_txt = c1.selectbox("👷 Operario contactado", list(operario_map.keys()), index=None, placeholder="Opcional...")
+            origen       = c2.selectbox("📡 Canal de contacto", TIPOS_CONTACTO)
+
+            st.markdown('<div class="section-title">2. Caracterización del problema</div>', unsafe_allow_html=True)
+            categoria        = st.selectbox("📂 Categoría *", CATEGORIAS)
+            criticidad_auto  = criticidad_por_categoria(categoria)
+            col_crit, _      = st.columns([1, 3])
+            col_crit.info(f"🎯 Criticidad asignada automáticamente: **{criticidad_auto}**")
+
+            problema     = st.text_area("📝 Descripción del problema *", height=120,
+                                        placeholder="Describa con claridad el problema reportado o detectado...")
+            observaciones = st.text_area("💬 Observaciones adicionales", height=75,
+                                          placeholder="Contexto, antecedentes, información extra...")
+
+            st.markdown('<div class="section-title">3. Seguimiento (opcional)</div>', unsafe_allow_html=True)
+            requiere = st.checkbox("📅 Programar seguimiento")
+            c1, c2   = st.columns(2)
+            fecha_seg = c1.date_input("Fecha seguimiento", value=datetime.now().date(), disabled=not requiere)
+            hora_seg  = c2.time_input("Hora seguimiento",  value=time(8, 0),            disabled=not requiere)
+
+            guardar = st.form_submit_button("✅ Crear caso", use_container_width=True, type="primary")
+
+        if guardar:
+            if not maquina_txt or not problema.strip():
+                st.error("⚠️ Seleccione la cosechadora y describa el problema.")
+            else:
+                maquina  = maquina_map[maquina_txt]
+                operario = operario_map.get(operario_txt) if operario_txt else None
+                fecha_hora = datetime.combine(fecha, hora)
+                proximo    = datetime.combine(fecha_seg, hora_seg) if requiere else None
+
+                caso = Caso(
+                    consecutivo              = generar_consecutivo(db),
+                    fecha_apertura           = fecha_hora,
+                    maquina_id               = maquina.id,
+                    operario_id              = operario.id if operario else None,
+                    creado_por_id            = st.session_state.usuario_id,
+                    origen                   = origen,
+                    categoria                = categoria,
+                    criticidad               = criticidad_auto,
+                    problema                 = problema.strip(),
+                    estado                   = "Abierto",
+                    requiere_seguimiento     = requiere,
+                    fecha_proximo_seguimiento= proximo,
+                    observaciones            = observaciones.strip(),
                 )
-
-                c1, c2, c3 = st.columns([3, 1, 1])
-                maquina_txt = c1.selectbox(
-                    "🚜 Cosechadora *",
-                    list(maquina_map.keys()),
-                    index=None,
-                    placeholder="Seleccione..."
-                )
-                fecha = c2.date_input("📅 Fecha", value=ahora_colombia().date())
-                hora = c3.time_input(
-                    "🕐 Hora",
-                    value=ahora_colombia().time().replace(second=0, microsecond=0)
-                )
-
-                c1, c2 = st.columns(2)
-                operario_txt = c1.selectbox(
-                    "👷 Operario contactado",
-                    list(operario_map.keys()),
-                    index=None,
-                    placeholder="Opcional..."
-                )
-                origen = c2.selectbox("📡 Canal de contacto", TIPOS_CONTACTO)
-
-                st.markdown(
-                    '<div class="section-title">2. Caracterización del problema</div>',
-                    unsafe_allow_html=True
-                )
-                categoria = st.selectbox("📂 Categoría *", CATEGORIAS)
-                criticidad_auto = criticidad_por_categoria(categoria)
-
-                col_crit, _ = st.columns([1, 3])
-                col_crit.info(
-                    f"🎯 Criticidad asignada automáticamente: **{criticidad_auto}**"
-                )
-
-                problema = st.text_area(
-                    "📝 Descripción del problema *",
-                    height=120,
-                    placeholder="Describa con claridad el problema reportado o detectado..."
-                )
-                observaciones = st.text_area(
-                    "💬 Observaciones adicionales",
-                    height=75,
-                    placeholder="Contexto, antecedentes, información extra..."
-                )
-
-                st.markdown(
-                    '<div class="section-title">3. Seguimiento (opcional)</div>',
-                    unsafe_allow_html=True
-                )
-                requiere = st.checkbox("📅 Programar seguimiento")
-
-                c1, c2 = st.columns(2)
-                fecha_seg = c1.date_input(
-                    "Fecha seguimiento",
-                    value=ahora_colombia().date(),
-                    disabled=not requiere
-                )
-                hora_seg = c2.time_input(
-                    "Hora seguimiento",
-                    value=time(8, 0),
-                    disabled=not requiere
-                )
-
-                guardar = st.form_submit_button(
-                    "✅ Crear caso",
-                    use_container_width=True,
-                    type="primary"
-                )
-
-            if guardar:
-                if not maquina_txt or not problema.strip():
-                    st.error("⚠️ Seleccione la cosechadora y describa el problema.")
-                else:
-                    maquina = maquina_map[maquina_txt]
-                    operario = operario_map.get(operario_txt) if operario_txt else None
-                    fecha_hora = datetime.combine(fecha, hora)
-                    proximo = datetime.combine(fecha_seg, hora_seg) if requiere else None
-
-                    caso = Caso(
-                        consecutivo=generar_consecutivo(db),
-                        fecha_apertura=fecha_hora,
-                        maquina_id=maquina.id,
-                        operario_id=operario.id if operario else None,
-                        creado_por_id=st.session_state.usuario_id,
-                        origen=origen,
-                        categoria=categoria,
-                        criticidad=criticidad_auto,
-                        problema=problema.strip(),
-                        estado="Abierto",
-                        requiere_seguimiento=requiere,
-                        fecha_proximo_seguimiento=proximo,
-                        observaciones=observaciones.strip(),
-                    )
-
-                    db.add(caso)
-                    db.commit()
-
-                    st.success(
-                        f"✅ Caso creado: **{caso.consecutivo}** — "
-                        f"Criticidad: **{criticidad_auto}**"
-                    )
-                    st.balloons()
+                db.add(caso)
+                db.commit()
+                st.success(f"✅ Caso creado: **{caso.consecutivo}** — Criticidad: **{criticidad_auto}**")
+                st.balloons()
     finally:
         db.close()
 
@@ -852,8 +761,8 @@ with tabs[IDX_GESTION]:
                 with st.form("gestion", clear_on_submit=True):
                     st.markdown('<div class="section-title">Registro de la gestión</div>', unsafe_allow_html=True)
                     c1, c2, c3 = st.columns(3)
-                    fecha    = c1.date_input("📅 Fecha", value=ahora_colombia().date())
-                    hora     = c2.time_input("🕐 Hora", value=ahora_colombia().time().replace(second=0, microsecond=0))
+                    fecha    = c1.date_input("📅 Fecha", value=datetime.now().date())
+                    hora     = c2.time_input("🕐 Hora", value=datetime.now().time().replace(second=0, microsecond=0))
                     duracion = c3.number_input("⏱️ Duración (min)", min_value=0.0, step=1.0, value=0.0)
 
                     c1, c2   = st.columns(2)
@@ -872,7 +781,7 @@ with tabs[IDX_GESTION]:
                     requiere     = c2.checkbox("📅 Requiere nueva gestión")
 
                     c1, c2   = st.columns(2)
-                    f_seg    = c1.date_input("Fecha próxima gestión", value=ahora_colombia().date(), disabled=not requiere)
+                    f_seg    = c1.date_input("Fecha próxima gestión", value=datetime.now().date(), disabled=not requiere)
                     h_seg    = c2.time_input("Hora próxima gestión",  value=time(8, 0),            disabled=not requiere)
 
                     cerrando = nuevo_estado in ["Solucionado", "Cerrado sin solución"]
@@ -1012,8 +921,8 @@ with tabs[IDX_IND]:
     db = get_db()
     try:
         c1, c2 = st.columns(2)
-        desde_ind = c1.date_input("Desde", value=(ahora_colombia() - timedelta(days=30)).date(), key="ind_desde")
-        hasta_ind = c2.date_input("Hasta", value=ahora_colombia().date(), key="ind_hasta")
+        desde_ind = c1.date_input("Desde", value=(datetime.now() - timedelta(days=30)).date(), key="ind_desde")
+        hasta_ind = c2.date_input("Hasta", value=datetime.now().date(), key="ind_hasta")
 
         inicio = datetime.combine(desde_ind, datetime.min.time())
         fin    = datetime.combine(hasta_ind, datetime.max.time())
@@ -1046,7 +955,8 @@ with tabs[IDX_IND]:
                 "Caso":          c.consecutivo,
                 "Fecha":         c.fecha_apertura,
                 "Máquina":       str(c.maquina.codigo),
-                "Operario":      c.operario.nombre if c.operario else "",
+                "Grupo":         c.maquina.grupo if (c.maquina and c.maquina.grupo) else "Sin grupo",
+                "Operario":      c.operario.nombre if c.operario else "Sin operario",
                 "Categoría":     c.categoria,
                 "Criticidad":    c.criticidad,
                 "Estado":        c.estado,
@@ -1079,6 +989,27 @@ with tabs[IDX_IND]:
                                    font_family="Segoe UI, Arial")
                 st.plotly_chart(fig3, use_container_width=True)
 
+            # Gráfica: Casos por grupo de máquina (antes de top máquinas)
+            df_grupo = (
+                df_casos.groupby("Grupo").size()
+                        .reset_index(name="Casos")
+                        .sort_values("Casos", ascending=False)
+            )
+            df_grupo["Grupo"] = df_grupo["Grupo"].astype(str)
+
+            fig_grupo = px.bar(
+                df_grupo, x="Grupo", y="Casos",
+                title="Casos por grupo de máquina",
+                color_discrete_sequence=["#2d7a2d"],
+                text="Casos",
+            )
+            fig_grupo.update_traces(textposition="outside")
+            fig_grupo.update_xaxes(type="category")
+            fig_grupo.update_layout(paper_bgcolor="white", plot_bgcolor="#fafafa",
+                                   height=340, font_family="Segoe UI, Arial",
+                                   xaxis_title="Grupo de máquina")
+            st.plotly_chart(fig_grupo, use_container_width=True)
+
             # Asegurar que el eje X de máquinas sea texto
             df_maq = (
                 df_casos.groupby("Máquina").size()
@@ -1101,31 +1032,46 @@ with tabs[IDX_IND]:
                                xaxis_title="Código de máquina")
             st.plotly_chart(fig2, use_container_width=True)
 
+            # Gráfica: Top operarios con más casos (después de top máquinas)
+            df_op = (
+                df_casos[df_casos["Operario"] != "Sin operario"]
+                .groupby("Operario").size()
+                .reset_index(name="Casos")
+                .sort_values("Casos", ascending=False)
+                .head(15)
+            )
+            if not df_op.empty:
+                df_op["Operario"] = df_op["Operario"].astype(str)
+                fig_op = px.bar(
+                    df_op, x="Operario", y="Casos",
+                    title="Top operarios con más casos",
+                    color_discrete_sequence=["#3b82f6"],
+                    text="Casos",
+                )
+                fig_op.update_traces(textposition="outside")
+                fig_op.update_xaxes(type="category")
+                fig_op.update_layout(paper_bgcolor="white", plot_bgcolor="#fafafa",
+                                       height=340, font_family="Segoe UI, Arial",
+                                       xaxis_title="Operario")
+                st.plotly_chart(fig_op, use_container_width=True)
+
             # Exportar Excel
-            # Excel/openpyxl no acepta datetimes con zona horaria.
-            # Se normalizan las fechas a hora Colombia y se elimina tzinfo.
             buffer = io.BytesIO()
-
-            df_casos_excel = preparar_para_excel(df_casos)
-
-            df_gest = pd.DataFrame([{
-                "Caso":              g.caso.consecutivo,
-                "Fecha":             g.fecha_hora,
-                "Máquina":           str(g.caso.maquina.codigo),
-                "Analista":          g.usuario.nombre,
-                "Canal":             g.tipo_contacto,
-                "Resultado":         g.resultado_contacto,
-                "Duración (min)":    g.duracion_minutos,
-                "Detalle":           g.detalle,
-                "Solución indicada": g.solucion_indicada or "",
-                "Estado resultante": g.estado_resultante,
-            } for g in gestiones_ind])
-
-            df_gest_excel = preparar_para_excel(df_gest)
-
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                df_casos_excel.to_excel(writer, index=False, sheet_name="Casos")
-                df_gest_excel.to_excel(writer, index=False, sheet_name="Gestiones")
+                df_casos.to_excel(writer, index=False, sheet_name="Casos")
+                df_gest = pd.DataFrame([{
+                    "Caso":              g.caso.consecutivo,
+                    "Fecha":             g.fecha_hora,
+                    "Máquina":           str(g.caso.maquina.codigo),
+                    "Analista":          g.usuario.nombre,
+                    "Canal":             g.tipo_contacto,
+                    "Resultado":         g.resultado_contacto,
+                    "Duración (min)":    g.duracion_minutos,
+                    "Detalle":           g.detalle,
+                    "Solución indicada": g.solucion_indicada or "",
+                    "Estado resultante": g.estado_resultante,
+                } for g in gestiones_ind])
+                df_gest.to_excel(writer, index=False, sheet_name="Gestiones")
 
             st.download_button(
                 "📥 Descargar reporte Excel",
