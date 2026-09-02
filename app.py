@@ -1064,22 +1064,29 @@ with tabs[IDX_IND]:
                 lambda x: x.strftime("%d/%m/%Y %H:%M") if pd.notna(x) else ""
             )
             
+            df_gest = pd.DataFrame([{
+                "Caso":              g.caso.consecutivo,
+                "Fecha":             g.fecha_hora,
+                "Máquina":           str(g.caso.maquina.codigo),
+                "Analista":          g.usuario.nombre,
+                "Canal":             g.tipo_contacto,
+                "Resultado":         g.resultado_contacto,
+                "Duración (min)":    g.duracion_minutos,
+                "Detalle":           g.detalle,
+                "Solución indicada": g.solucion_indicada or "",
+                "Estado resultante": g.estado_resultante,
+            } for g in gestiones_ind])
+            
+            # Convertir fecha de gestiones a texto
+            if not df_gest.empty:
+                df_gest["Fecha"] = df_gest["Fecha"].apply(
+                    lambda x: x.strftime("%d/%m/%Y %H:%M") if pd.notna(x) else ""
+                )
+            
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                 df_casos_excel.to_excel(writer, index=False, sheet_name="Casos")
-                df_gest = pd.DataFrame([{
-                    "Caso":              g.caso.consecutivo,
-                    "Fecha":             g.fecha_hora,
-                    "Máquina":           str(g.caso.maquina.codigo),
-                    "Analista":          g.usuario.nombre,
-                    "Canal":             g.tipo_contacto,
-                    "Resultado":         g.resultado_contacto,
-                    "Duración (min)":    g.duracion_minutos,
-                    "Detalle":           g.detalle,
-                    "Solución indicada": g.solucion_indicada or "",
-                    "Estado resultante": g.estado_resultante,
-                } for g in gestiones_ind])
                 df_gest.to_excel(writer, index=False, sheet_name="Gestiones")
-
+            
             st.download_button(
                 "📥 Descargar reporte Excel",
                 data=buffer.getvalue(),
