@@ -1056,9 +1056,16 @@ with tabs[IDX_IND]:
                 st.plotly_chart(fig_op, use_container_width=True)
 
             # Exportar Excel
+            # Exportar Excel
             buffer = io.BytesIO()
+            
+            df_casos_excel = df_casos.copy()
+            df_casos_excel["Fecha"] = df_casos_excel["Fecha"].apply(
+                lambda x: x.strftime("%d/%m/%Y %H:%M") if pd.notna(x) else ""
+            )
+            
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                df_casos.to_excel(writer, index=False, sheet_name="Casos")
+                df_casos_excel.to_excel(writer, index=False, sheet_name="Casos")
                 df_gest = pd.DataFrame([{
                     "Caso":              g.caso.consecutivo,
                     "Fecha":             g.fecha_hora,
