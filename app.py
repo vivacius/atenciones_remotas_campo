@@ -1003,7 +1003,7 @@ with tabs[IDX_IND]:
                 color_discrete_sequence=["#2d7a2d"],
                 text="Casos",
             )
-            fig_grupo.update_traces(textposition="outside")
+            fig_grupo.update_traces(textposition="outside",cliponaxis=False)
             fig_grupo.update_xaxes(type="category")
             fig_grupo.update_layout(paper_bgcolor="white", plot_bgcolor="#fafafa",
                                    height=400,margin=dict(t=100, b=60, l=60, r=30), font_family="Segoe UI, Arial",
@@ -1048,7 +1048,7 @@ with tabs[IDX_IND]:
                     color_discrete_sequence=["#3b82f6"],
                     text="Casos",
                 )
-                fig_op.update_traces(textposition="outside")
+                fig_op.update_traces(textposition="outside",cliponaxis=False)
                 fig_op.update_xaxes(type="category")
                 fig_op.update_layout(paper_bgcolor="white", plot_bgcolor="#fafafa",
                                        height=450,margin=dict(t=80, b=60, l=60, r=30), font_family="Segoe UI, Arial",
