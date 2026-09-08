@@ -975,7 +975,7 @@ with tabs[IDX_IND]:
                     color_discrete_sequence=["#4BAE4B"],
                 )
                 fig1.update_layout(paper_bgcolor="white", plot_bgcolor="white",
-                                   height=400,margin=dict(t=80, b=60, l=60, r=30), font_family="Segoe UI, Arial")
+                                   height=400, font_family="Segoe UI, Arial")
                 st.plotly_chart(fig1, use_container_width=True)
 
             with g2:
@@ -1006,7 +1006,7 @@ with tabs[IDX_IND]:
             fig_grupo.update_traces(textposition="outside")
             fig_grupo.update_xaxes(type="category")
             fig_grupo.update_layout(paper_bgcolor="white", plot_bgcolor="#fafafa",
-                                   height=400,margin=dict(t=80, b=60, l=60, r=30), font_family="Segoe UI, Arial",
+                                   height=400,margin=dict(t=100, b=60, l=60, r=30), font_family="Segoe UI, Arial",
                                    xaxis_title="Grupo de máquina")
             st.plotly_chart(fig_grupo, use_container_width=True)
 
@@ -1028,7 +1028,7 @@ with tabs[IDX_IND]:
             fig2.update_traces(textposition="outside")
             fig2.update_xaxes(type="category")   # ← fuerza eje categórico (texto)
             fig2.update_layout(paper_bgcolor="white", plot_bgcolor="#fafafa",
-                               height=400, margin=dict(t=80, b=60, l=60, r=30),font_family="Segoe UI, Arial",
+                               height=400, margin=dict(t=100, b=60, l=60, r=30),font_family="Segoe UI, Arial",
                                xaxis_title="Código de máquina")
             st.plotly_chart(fig2, use_container_width=True)
 
@@ -1051,7 +1051,7 @@ with tabs[IDX_IND]:
                 fig_op.update_traces(textposition="outside")
                 fig_op.update_xaxes(type="category")
                 fig_op.update_layout(paper_bgcolor="white", plot_bgcolor="#fafafa",
-                                       height=400,margin=dict(t=80, b=60, l=60, r=30), font_family="Segoe UI, Arial",
+                                       height=400,margin=dict(t=100, b=60, l=60, r=30), font_family="Segoe UI, Arial",
                                        xaxis_title="Operario")
                 st.plotly_chart(fig_op, use_container_width=True)
 
